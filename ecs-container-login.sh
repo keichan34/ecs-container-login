@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 CLUSTER=$1
 : ${CLUSTER:="default"}
