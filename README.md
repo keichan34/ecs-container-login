@@ -1,4 +1,4 @@
-# ecr-container-login
+# ecs-container-login
 
 ## Usage
 
@@ -9,8 +9,9 @@
 
 ## Dependencies
 
-* awscli
-* jq
-* peco
-* ssh
+(can all be installed with Homebrew)
+
+* [aws-cli](https://aws.amazon.com/cli/)
+* [jq](https://stedolan.github.io/jq/)
+* [peco](https://github.com/peco/peco)
 
