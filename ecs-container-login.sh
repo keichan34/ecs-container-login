@@ -6,10 +6,34 @@ set -o pipefail
 (which jq   > /dev/null 2>&1) || (echo "jq not found."; exit 1)
 (which peco > /dev/null 2>&1) || (echo "peco not found."; exit 1)
 
-CLUSTER=$1
-: ${CLUSTER:="default"}
+show_help () {
+  echo "ecs-container-login.sh [options] [command]"
+  echo "Run a command in a Docker container managed by ECS"
+  echo "Valid options:"
+  echo "  -h         Show this help"
+  echo "  -c name    Set the ECS cluster name (default: default)"
+}
+
+OPTIND=1
+CLUSTER="default"
+
+while getopts "hc:" opt; do
+  case "$opt" in
+    h)
+      show_help
+      exit 0
+      ;;
+    c)
+      CLUSTER="$OPTARG"
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
 
 : ${SSH:="ssh"}
+REMOTE_CMD=$@
+: ${REMOTE_CMD:="bash"}
 
 PECO_CONFIG=`dirname $0`/peco_config.json
 PECO="peco --rcfile=${PECO_CONFIG}"
@@ -55,5 +79,5 @@ DOCKER_CONTAINER_NAME=`\
   $SSH ec2-user@$EXTERNAL_IP curl -s "http://localhost:51678/v1/tasks?taskarn=$TASK_ARN" | \
   jq -r '.Containers[0].DockerName'`
 
-$SSH ec2-user@$EXTERNAL_IP -t "docker exec -it $DOCKER_CONTAINER_NAME bash"
+$SSH ec2-user@$EXTERNAL_IP -t "docker exec -it $DOCKER_CONTAINER_NAME $REMOTE_CMD"
 
