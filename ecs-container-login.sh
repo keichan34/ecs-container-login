@@ -10,14 +10,23 @@ show_help () {
   echo "ecs-container-login.sh [options] [command]"
   echo "Run a command in a Docker container managed by ECS"
   echo "Valid options:"
-  echo "  -h         Show this help"
-  echo "  -c name    Set the ECS cluster name (default: default)"
+  echo "  -h          Show this help"
+  echo "  -c name     Set the ECS cluster name (default: default)"
+  echo "  -p          Use public IP address for SSH (default: private)"
+  echo "  -u          SSH user (default: ec2-user)"
+  echo ""
+  echo "Environment variables:"
+  echo "  SSH         The SSH command to use (useful if you need a ssh "
+  echo "              tunnel or nonstandard port, etc"
+  echo "  PECO_CONFIG Path to custom peco config file"
 }
 
 OPTIND=1
 CLUSTER="default"
+USE_PRIVATE=1
+SSH_USER="ec2-user"
 
-while getopts "hc:" opt; do
+while getopts "hpc:u:" opt; do
   case "$opt" in
     h)
       show_help
@@ -25,6 +34,12 @@ while getopts "hc:" opt; do
       ;;
     c)
       CLUSTER="$OPTARG"
+      ;;
+    p)
+      USE_PRIVATE=0
+      ;;
+    u)
+      SSH_USER="$OPTARG"
       ;;
   esac
 done
@@ -35,7 +50,7 @@ shift $((OPTIND-1))
 REMOTE_CMD=$@
 : ${REMOTE_CMD:="bash"}
 
-PECO_CONFIG=`dirname $0`/peco_config.json
+: ${PECO_CONFIG:=`dirname $0`/peco_config.json}
 PECO="peco --rcfile=${PECO_CONFIG}"
 
 SERVICE_ARN=`\
@@ -61,23 +76,23 @@ EC2_INSTANCE_ID=`\
 
 INSTANCE_DETAILS=`aws ec2 describe-instances --instance-ids "$EC2_INSTANCE_ID" --output json`
 
-INTERNAL_IP=`\
+CONN_IP=`\
   echo "$INSTANCE_DETAILS" | \
   jq -r '.Reservations[0].Instances[0].PrivateIpAddress'`
 
-EXTERNAL_IP=`\
-  echo "$INSTANCE_DETAILS" | \
-  jq -r '.Reservations[0].Instances[0].PublicIpAddress'`
+if [[ "$USE_PRIVATE" = "0" ]]; then
+  CONN_IP=`\
+    echo "$INSTANCE_DETAILS" | \
+    jq -r '.Reservations[0].Instances[0].PublicIpAddress'`
+fi
 
-# echo "On $INTERNAL_IP,"
+echo "Connecting to $SSH_USER@$CONN_IP..."
 
-# Introspect agent to find the docker name of the container:
-# curl http://localhost:51678/v1/tasks?taskarn=<task ARN>
-# find docker name, use that to exec
+SSHCMD="$SSH $SSH_USER@$CONN_IP"
 
 DOCKER_CONTAINER_NAME=`\
-  $SSH ec2-user@$EXTERNAL_IP curl -s "http://localhost:51678/v1/tasks?taskarn=$TASK_ARN" | \
+  $SSHCMD curl -s "http://localhost:51678/v1/tasks?taskarn=$TASK_ARN" | \
   jq -r '.Containers[0].DockerName'`
 
-$SSH ec2-user@$EXTERNAL_IP -t "docker exec -it $DOCKER_CONTAINER_NAME $REMOTE_CMD"
+$SSHCMD -t "docker exec -it $DOCKER_CONTAINER_NAME $REMOTE_CMD"
 
