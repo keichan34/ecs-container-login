@@ -3,15 +3,21 @@
 set -e
 set -o pipefail
 
+(which jq   > /dev/null 2>&1) || (echo "jq not found."; exit 1)
+(which peco > /dev/null 2>&1) || (echo "peco not found."; exit 1)
+
 CLUSTER=$1
 : ${CLUSTER:="default"}
 
 : ${SSH:="ssh"}
 
+PECO_CONFIG=`dirname $0`/peco_config.json
+PECO="peco --rcfile=${PECO_CONFIG}"
+
 SERVICE_ARN=`\
   aws ecs list-services --cluster "$CLUSTER" --output json | \
   jq -r '.serviceArns | join("\n")' | \
-  peco`
+  $PECO`
 
 # SERVICE_ARN is in ARN format. However, list-tasks takes service name.
 # Does it take service ARN as well?
@@ -19,7 +25,7 @@ SERVICE_ARN=`\
 TASK_ARN=`\
   aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE_ARN" --output json | \
   jq -r '.taskArns | join("\n")' | \
-  peco`
+  $PECO`
 
 CONTAINER_INSTANCE_ARN=`\
   aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --output json | \
