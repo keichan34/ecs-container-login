@@ -66,9 +66,28 @@ TASK_ARN=`\
   jq -r '.taskArns | join("\n")' | \
   $PECO`
 
+TASK_DETAILS=`\
+  aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --output json |\
+  jq -r .tasks[0]`
+
 CONTAINER_INSTANCE_ARN=`\
-  aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --output json | \
-  jq -r '.tasks[0].containerInstanceArn'`
+  echo "$TASK_DETAILS" | \
+  jq -r '.containerInstanceArn'`
+
+CONTAINER_COUNT=`\
+  echo "$TASK_DETAILS" | \
+  jq -r '.containers | length'`
+
+SELECTED_CONTAINER_NAME=`
+  echo "$TASK_DETAILS" | \
+  jq -r '.containers[0].name'`
+
+if [ "$CONTAINER_COUNT" -gt "1" ]; then
+  SELECTED_CONTAINER_NAME=`\
+    echo "$TASK_DETAILS" | \
+    jq -r '.containers | map(.name) | join("\n")' |\
+    $PECO`
+fi
 
 EC2_INSTANCE_ID=`\
   aws ecs describe-container-instances --cluster "$CLUSTER" --container-instances "$CONTAINER_INSTANCE_ARN" --output json | \
@@ -92,7 +111,6 @@ SSHCMD="$SSH $SSH_USER@$CONN_IP"
 
 DOCKER_CONTAINER_NAME=`\
   $SSHCMD curl -s "http://localhost:51678/v1/tasks?taskarn=$TASK_ARN" | \
-  jq -r '.Containers[0].DockerName'`
+  jq -r ".Containers | map(select(.Name == \"$SELECTED_CONTAINER_NAME\")) | .[0].DockerName"`
 
 $SSHCMD -t "docker exec -it $DOCKER_CONTAINER_NAME $REMOTE_CMD"
-
